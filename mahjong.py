@@ -13,19 +13,20 @@ cv2.ocl.setUseOpenCL(False)
 
 examples = []
 sift = cv2.xfeatures2d.SIFT_create()
+print "Loading examples..."
 for file in os.listdir("./examples"):
- print (file)
  exampleImage = cv2.imread("./examples/" + file,0)  
  kp, des = sift.detectAndCompute(exampleImage, None)
  examples.append((file.split(".", 1)[0].split("_", 1)[0], kp, des))
+print str(len(examples)) + " examples loaded."
 
 matcher = cv2.BFMatcher()
 
 while True:
-        a = raw_input("enter to start")
-	#Create a memory stream so photos doesn't need to be saved in a file
-	stream = io.BytesIO()
+        a = raw_input("enter to start scanning")
 
+        # Get image from raspberry pi camera
+	stream = io.BytesIO()
         width = 640*2
         height = 480*2
 	with picamera.PiCamera() as camera:
@@ -39,25 +40,32 @@ while True:
 	buff = numpy.fromstring(stream.getvalue(), dtype=numpy.uint8)
 
 	image = cv2.imdecode(buff, 1)
+
+        # Assuming that tiles are in lower part of image
         image = image[(height/2):height, 0:width]
 
+        # Grayscale and blur, blur is required to make the edge detection work
 	gray = cv2.cvtColor(image,cv2.COLOR_BGR2GRAY)
         gray = cv2.medianBlur(gray, 7)
+
+        # Threshold to simplify images
         ret, thresh = cv2.threshold(gray, 100, 255, cv2.THRESH_BINARY)
   
+        # Edge detection
         edges = cv2.Canny(thresh, 80, 255, apertureSize = 3)
 	cv2.imwrite('gray.jpg',gray)
 	cv2.imwrite('thresh.jpg',thresh)
 	cv2.imwrite('edges.jpg',edges)
 
+        # Now find the contours of the rectangles
 	im2, cnts, h = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         image_index = 1
 	small_images = []
+        tile_matches = []
 	for c in cnts:
           peri = cv2.arcLength(c, True)
           approx = cv2.approxPolyDP(c, 0.04 * peri, True)
 	  area = cv2.contourArea(c)
-          print "len: " + str(len(approx)) + " area: " + str(area)
           if len(approx)>=4 and area > 500:
            rect = cv2.minAreaRect(c)
            box = cv2.boxPoints(rect)
@@ -106,14 +114,14 @@ while True:
            M = cv2.moments(c)
            cX = int((M["m10"]/M["m00"]))
            cY = int((M["m01"]/M["m00"]))
-           print best_count
            if best_count >= 5:
-            print best
+            tile_matches.append(best)
             cv2.putText(image, best, (cX,cY), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,0,255),2)
+        print str(len(small_images)) + " tiles found"
+        for match in tile_matches:
+         print match
          
-
         montage = build_montages(small_images, (320,200), (10, 1))
 	for m in montage:
 	 cv2.imwrite('montage.jpg',m)
 	cv2.imwrite('output.jpg',image)
-	sleep(1) #Save the result image
