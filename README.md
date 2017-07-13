@@ -1,1 +1,1 @@
-# tile_detection
+Project for detecting mahjong tiles
